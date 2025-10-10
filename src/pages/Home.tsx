@@ -1,12 +1,17 @@
 import { getTodayRecords } from "@/lib/mockData";
 import { CategoryChip } from "@/components/CategoryChip";
 import { Category } from "@/lib/types";
-import { Calendar, TrendingUp, Package, DollarSign } from "lucide-react";
+import { Calendar as CalendarIcon, TrendingUp, Package, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { useState } from "react";
 
 const Home = () => {
   const navigate = useNavigate();
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const todayRecords = getTodayRecords();
   
   const totalSales = todayRecords.reduce((sum, r) => sum + r.sales, 0);
@@ -34,12 +39,14 @@ const Home = () => {
     .sort((a, b) => a.remaining - b.remaining)
     .slice(0, 5);
 
-  const today = new Date().toLocaleDateString("en-IN", {
+  const displayDate = selectedDate.toLocaleDateString("en-IN", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+
+  const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -53,18 +60,35 @@ const Home = () => {
               </h1>
               <p className="text-sm text-muted-foreground mt-1">Inventory Dashboard</p>
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/10">
-              <Calendar className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium">Today</span>
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/10 hover:bg-primary/20"
+                >
+                  <CalendarIcon className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">
+                    {isToday ? "Today" : format(selectedDate, "dd MMM yyyy")}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* Today's Date */}
+        {/* Selected Date */}
         <div className="text-center mb-4">
-          <p className="text-sm text-muted-foreground">{today}</p>
+          <p className="text-sm text-muted-foreground">{displayDate}</p>
         </div>
 
         {/* Summary Cards */}
