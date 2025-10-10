@@ -23,14 +23,14 @@ const Inventory = () => {
 
   const categories: Category[] = ["WATER BASE", "MILK BASE", "FAMILY PACK", "4L TUBS"];
 
-  const handleSwipeRight = (recordId: string) => {
+  const handleIncrease = (recordId: string) => {
     toast.success("Added +1 box", {
       description: `Stock increased`,
       duration: 2000,
     });
   };
 
-  const handleSwipeLeft = (recordId: string) => {
+  const handleDecrease = (recordId: string) => {
     toast.info("Reduced -1 box", {
       description: `Stock decreased`,
       duration: 2000,
@@ -107,8 +107,8 @@ const Inventory = () => {
             <VarietyCard
               key={record.id}
               record={record}
-              onSwipeRight={() => handleSwipeRight(record.id)}
-              onSwipeLeft={() => handleSwipeLeft(record.id)}
+              onIncrease={() => handleIncrease(record.id)}
+              onDecrease={() => handleDecrease(record.id)}
               onTap={() => handleTap(record.id)}
             />
           ))}

@@ -1,54 +1,15 @@
 import { DailyRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { useState } from "react";
+import { TrendingUp, TrendingDown, Minus, Plus } from "lucide-react";
 
 interface VarietyCardProps {
   record: DailyRecord;
-  onSwipeRight?: () => void;
-  onSwipeLeft?: () => void;
+  onIncrease?: () => void;
+  onDecrease?: () => void;
   onTap?: () => void;
 }
 
-export const VarietyCard = ({ record, onSwipeRight, onSwipeLeft, onTap }: VarietyCardProps) => {
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(null);
-
-  const minSwipeDistance = 50;
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe && onSwipeLeft) {
-      setSwipeDirection("left");
-      setTimeout(() => {
-        onSwipeLeft();
-        setSwipeDirection(null);
-      }, 200);
-    }
-    
-    if (isRightSwipe && onSwipeRight) {
-      setSwipeDirection("right");
-      setTimeout(() => {
-        onSwipeRight();
-        setSwipeDirection(null);
-      }, 200);
-    }
-  };
+export const VarietyCard = ({ record, onIncrease, onDecrease, onTap }: VarietyCardProps) => {
 
   const profit = record.sellingPrice && record.cost 
     ? (record.sellingPrice - record.cost) * record.sales 
@@ -63,19 +24,36 @@ export const VarietyCard = ({ record, onSwipeRight, onSwipeLeft, onTap }: Variet
   };
 
   return (
-    <div
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      onClick={onTap}
-      className={cn(
-        "glass rounded-2xl p-4 shadow-[var(--shadow-card)] cursor-pointer",
-        "transition-all duration-200 active:scale-95",
-        "hover:shadow-[var(--shadow-soft)]",
-        swipeDirection === "right" && "translate-x-4 opacity-70",
-        swipeDirection === "left" && "-translate-x-4 opacity-70"
-      )}
-    >
+    <div className="relative glass rounded-2xl shadow-[var(--shadow-card)] overflow-hidden">
+      {/* Decrease Button (Left) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDecrease?.();
+        }}
+        className="absolute left-0 top-0 bottom-0 w-16 bg-[hsl(var(--raspberry))]/20 hover:bg-[hsl(var(--raspberry))]/30 
+                   transition-all duration-200 flex items-center justify-center group z-10"
+      >
+        <Minus className="w-6 h-6 text-[hsl(var(--raspberry))] group-hover:scale-110 transition-transform" />
+      </button>
+
+      {/* Increase Button (Right) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onIncrease?.();
+        }}
+        className="absolute right-0 top-0 bottom-0 w-16 bg-[hsl(var(--mint))]/20 hover:bg-[hsl(var(--mint))]/30 
+                   transition-all duration-200 flex items-center justify-center group z-10"
+      >
+        <Plus className="w-6 h-6 text-[hsl(var(--mint))] group-hover:scale-110 transition-transform" />
+      </button>
+
+      {/* Main Card Content */}
+      <div
+        onClick={onTap}
+        className="px-20 py-4 cursor-pointer transition-all duration-200 hover:bg-accent/5"
+      >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           <h3 className="font-semibold text-foreground mb-1">{record.variety}</h3>
@@ -110,7 +88,8 @@ export const VarietyCard = ({ record, onSwipeRight, onSwipeLeft, onTap }: Variet
       )}
 
       <div className="mt-2 text-xs text-muted-foreground text-center">
-        Swipe → to add • Swipe ← to reduce
+        Click sides to adjust stock
+      </div>
       </div>
     </div>
   );

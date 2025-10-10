@@ -196,6 +196,13 @@ const Home = () => {
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
           <Button
+            onClick={() => navigate("/daily-stocks")}
+            size="lg"
+            className="h-14 text-lg bg-[hsl(var(--raspberry))] hover:bg-[hsl(var(--raspberry))]/90 text-white"
+          >
+            Daily Stocks
+          </Button>
+          <Button
             onClick={() => navigate("/inventory")}
             size="lg"
             className="h-14 text-lg bg-[hsl(var(--mint))] hover:bg-[hsl(var(--mint))]/90 text-foreground"
@@ -206,7 +213,7 @@ const Home = () => {
             onClick={() => navigate("/analytics")}
             size="lg"
             variant="outline"
-            className="h-14 text-lg"
+            className="h-14 text-lg col-span-2"
           >
             Analytics
           </Button>
