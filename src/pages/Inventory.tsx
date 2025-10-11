@@ -2,8 +2,7 @@ import { useState } from "react";
 import { getTodayRecords } from "@/lib/mockData";
 import { Category } from "@/lib/types";
 import { CategoryChip } from "@/components/CategoryChip";
-import { VarietyCard } from "@/components/VarietyCard";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -12,6 +11,7 @@ const Inventory = () => {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
   
   const todayRecords = getTodayRecords();
   
@@ -23,23 +23,47 @@ const Inventory = () => {
 
   const categories: Category[] = ["WATER BASE", "MILK BASE", "FAMILY PACK", "4L TUBS"];
 
-  const handleIncrease = (recordId: string) => {
-    toast.success("Added +1 box", {
-      description: `Stock increased`,
-      duration: 2000,
-    });
+  const handleStockChange = (id: string, value: string) => {
+    setInputValues(prev => ({ ...prev, [id]: value }));
   };
 
-  const handleDecrease = (recordId: string) => {
-    toast.info("Reduced -1 box", {
-      description: `Stock decreased`,
-      duration: 2000,
-    });
-  };
+  const handleStockSubmit = (id: string, varietyName: string, currentStock: number) => {
+    const value = inputValues[id];
+    if (!value || value.trim() === "") return;
 
-  const handleTap = (recordId: string) => {
-    // In future, open bottom sheet with details
-    console.log("Tapped record:", recordId);
+    const trimmedValue = value.trim();
+    let newStock = currentStock;
+    let operation = "";
+
+    if (trimmedValue.startsWith("+")) {
+      const addAmount = parseInt(trimmedValue.substring(1));
+      if (!isNaN(addAmount)) {
+        newStock = currentStock + addAmount;
+        operation = `+${addAmount}`;
+      }
+    } else if (trimmedValue.startsWith("-")) {
+      const subtractAmount = parseInt(trimmedValue.substring(1));
+      if (!isNaN(subtractAmount)) {
+        newStock = Math.max(0, currentStock - subtractAmount);
+        operation = `-${subtractAmount}`;
+      }
+    } else {
+      const directValue = parseInt(trimmedValue);
+      if (!isNaN(directValue)) {
+        newStock = Math.max(0, directValue);
+        operation = `set to ${directValue}`;
+      }
+    }
+
+    if (newStock !== currentStock) {
+      toast.success(`${varietyName} updated`, {
+        description: `Stock: ${currentStock} → ${newStock}`,
+        duration: 2000,
+      });
+    }
+
+    // Clear input
+    setInputValues(prev => ({ ...prev, [id]: "" }));
   };
 
   return (
@@ -104,13 +128,48 @@ const Inventory = () => {
         {/* Inventory Cards */}
         <div className="grid gap-4">
           {filteredRecords.map((record) => (
-            <VarietyCard
-              key={record.id}
-              record={record}
-              onIncrease={() => handleIncrease(record.id)}
-              onDecrease={() => handleDecrease(record.id)}
-              onTap={() => handleTap(record.id)}
-            />
+            <div key={record.id} className="glass rounded-xl p-4 shadow-[var(--shadow-card)]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">{record.variety}</h3>
+                  <CategoryChip category={record.category} />
+                </div>
+                <Package className="w-5 h-5 text-[hsl(var(--mint))]" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                <div>
+                  <div className="text-xs text-muted-foreground">Stock</div>
+                  <div className="text-lg font-bold text-[hsl(var(--mint))]">{record.stock}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Remaining</div>
+                  <div className="text-lg font-bold text-[hsl(var(--mango))]">{record.remaining}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Sales</div>
+                  <div className="text-lg font-bold text-[hsl(var(--raspberry))]">{record.sales}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground block">
+                  Update Stock (e.g., 10, +5, or -3)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Type and press Enter"
+                  value={inputValues[record.id] || ""}
+                  onChange={(e) => handleStockChange(record.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleStockSubmit(record.id, record.variety, record.stock);
+                    }
+                  }}
+                  className="text-center h-11"
+                />
+              </div>
+            </div>
           ))}
         </div>
 
