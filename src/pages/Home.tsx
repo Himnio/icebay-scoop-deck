@@ -1,93 +1,156 @@
-import { getTodayRecords, varieties } from "@/lib/mockData";
-import { CategoryChip } from "@/components/CategoryChip";
-import { Category } from "@/lib/types";
-import { Calendar as CalendarIcon, TrendingUp, Package, DollarSign, ShoppingCart, Home as HomeIcon, BarChart3, ClipboardList } from "lucide-react";
+import { useState, useMemo } from "react";
+import { varieties } from "@/lib/mockData";
+import { Category, Order, OrderItem } from "@/lib/types";
+import { Search, ShoppingCart, Home as HomeIcon, DollarSign, BarChart3, ClipboardList, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format } from "date-fns";
-import { useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const Home = () => {
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedCategory, setSelectedCategory] = useState<Category | "">("");
-  const [selectedVariety, setSelectedVariety] = useState("");
-  const [saleQuantity, setSaleQuantity] = useState("");
-  const todayRecords = getTodayRecords();
-  
-  const totalSales = todayRecords.reduce((sum, r) => sum + r.sales, 0);
-  const totalStock = todayRecords.reduce((sum, r) => sum + r.stock, 0);
-  const totalRemaining = todayRecords.reduce((sum, r) => sum + r.remaining, 0);
-  const totalProfit = todayRecords.reduce((sum, r) => {
-    const profit = (r.sellingPrice || 0) - (r.cost || 0);
-    return sum + (profit * r.sales);
-  }, 0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
+  const [cart, setCart] = useState<OrderItem[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const categories: Category[] = ["WATER BASE", "MILK BASE", "FAMILY PACK", "4L TUBS"];
-  
-  const categoryBreakdown = categories.map((category) => {
-    const categoryRecords = todayRecords.filter((r) => r.category === category);
-    const sales = categoryRecords.reduce((sum, r) => sum + r.sales, 0);
-    return { category, sales };
-  }).filter(c => c.sales > 0);
 
-  const topSellers = todayRecords
-    .sort((a, b) => b.sales - a.sales)
-    .slice(0, 5);
+  // Filter varieties based on search and selected categories
+  const filteredVarieties = useMemo(() => {
+    let filtered = varieties;
+    
+    if (selectedCategories.length > 0) {
+      filtered = filtered.filter(v => selectedCategories.includes(v.category));
+    }
+    
+    if (searchQuery) {
+      filtered = filtered.filter(v => 
+        v.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    return filtered;
+  }, [searchQuery, selectedCategories]);
 
-  const lowStock = todayRecords
-    .filter((r) => r.remaining < 5 && r.remaining > 0)
-    .sort((a, b) => a.remaining - b.remaining)
-    .slice(0, 5);
+  const toggleCategory = (category: Category) => {
+    setSelectedCategories(prev => 
+      prev.includes(category) 
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
 
-  const displayDate = selectedDate.toLocaleDateString("en-IN", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const addToCart = (varietyId: string, varietyName: string, category: Category) => {
+    const existingItem = cart.find(item => item.varietyId === varietyId);
+    const price = 60; // Default price
+    
+    if (existingItem) {
+      setCart(cart.map(item => 
+        item.varietyId === varietyId 
+          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * price }
+          : item
+      ));
+    } else {
+      setCart([...cart, {
+        varietyId,
+        variety: varietyName,
+        category,
+        quantity: 1,
+        price,
+        total: price
+      }]);
+    }
+  };
 
-  const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+  const updateQuantity = (varietyId: string, quantity: number) => {
+    if (quantity <= 0) {
+      setCart(cart.filter(item => item.varietyId !== varietyId));
+    } else {
+      setCart(cart.map(item => 
+        item.varietyId === varietyId 
+          ? { ...item, quantity, total: quantity * item.price }
+          : item
+      ));
+    }
+  };
 
-  const filteredVarieties = selectedCategory 
-    ? varieties.filter(v => v.category === selectedCategory)
-    : varieties;
+  const removeFromCart = (varietyId: string) => {
+    setCart(cart.filter(item => item.varietyId !== varietyId));
+  };
 
-  const handleSale = () => {
-    if (!selectedCategory || !selectedVariety || !saleQuantity) {
+  const cartTotal = cart.reduce((sum, item) => sum + item.total, 0);
+
+  const createOrder = (status: "paid" | "unpaid") => {
+    if (cart.length === 0) {
       toast({
-        title: "Missing Information",
-        description: "Please select category, variety, and enter quantity",
+        title: "Empty Cart",
+        description: "Please add items to the cart first",
         variant: "destructive",
       });
       return;
     }
 
-    const quantity = parseInt(saleQuantity);
-    if (isNaN(quantity) || quantity <= 0) {
+    if (editingOrderId) {
+      // Update existing order
+      setOrders(orders.map(order => 
+        order.id === editingOrderId 
+          ? { ...order, items: cart, total: cartTotal, status }
+          : order
+      ));
       toast({
-        title: "Invalid Quantity",
-        description: "Please enter a valid quantity",
+        title: status === "paid" ? "Order Paid!" : "Order Updated",
+        description: `Order updated - Total: ₹${cartTotal}`,
+      });
+      setEditingOrderId(null);
+    } else {
+      // Create new order
+      const newOrder: Order = {
+        id: `order-${Date.now()}`,
+        orderNumber: orders.length + 1,
+        items: cart,
+        total: cartTotal,
+        status,
+        timestamp: new Date().toISOString(),
+      };
+      setOrders([newOrder, ...orders]);
+      toast({
+        title: status === "paid" ? "Order Paid!" : "Order Created",
+        description: `Order #${newOrder.orderNumber} - Total: ₹${cartTotal}`,
+      });
+    }
+
+    // Clear cart
+    setCart([]);
+  };
+
+  const loadOrder = (order: Order) => {
+    if (order.status === "paid") {
+      toast({
+        title: "Order Locked",
+        description: "Paid orders cannot be edited",
         variant: "destructive",
       });
       return;
     }
-
-    // In future, this will update the actual data
+    setCart(order.items);
+    setEditingOrderId(order.id);
     toast({
-      title: "Sale Recorded!",
-      description: `Sold ${quantity} ${selectedVariety} (${selectedCategory})`,
+      title: "Order Loaded",
+      description: `Order #${order.orderNumber} loaded for editing`,
     });
+  };
 
-    // Reset form
-    setSelectedCategory("");
-    setSelectedVariety("");
-    setSaleQuantity("");
+  const cancelEdit = () => {
+    setEditingOrderId(null);
+    setCart([]);
+    toast({
+      title: "Edit Cancelled",
+      description: "Cart cleared",
+    });
   };
 
   return (
@@ -95,211 +158,219 @@ const Home = () => {
       {/* Header */}
       <header className="glass sticky top-0 z-10 border-b border-border">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-[hsl(var(--mint))] to-[hsl(var(--raspberry))] bg-clip-text text-transparent">
-                ICE BAY
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">Inventory Dashboard</p>
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/10 hover:bg-primary/20"
-                >
-                  <CalendarIcon className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium">
-                    {isToday ? "Today" : format(selectedDate, "dd MMM yyyy")}
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => date && setSelectedDate(date)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-[hsl(var(--mint))] to-[hsl(var(--raspberry))] bg-clip-text text-transparent">
+            ICE BAY POS
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Point of Sale System</p>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 space-y-6 pb-24">
-        {/* Selected Date */}
-        <div className="text-center mb-4">
-          <p className="text-sm text-muted-foreground">{displayDate}</p>
-        </div>
-
-        {/* Quick Sale Form */}
-        <div className="glass rounded-2xl p-5 shadow-[var(--shadow-card)] border-2 border-primary/20">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-primary" />
-            Record Sale
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Category</label>
-              <Select value={selectedCategory} onValueChange={(value) => {
-                setSelectedCategory(value as Category);
-                setSelectedVariety("");
-              }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="WATER BASE">Water Base</SelectItem>
-                  <SelectItem value="MILK BASE">Milk Base</SelectItem>
-                  <SelectItem value="FAMILY PACK">Family Pack</SelectItem>
-                  <SelectItem value="4L TUBS">4L Tubs</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Variety</label>
-              <Select 
-                value={selectedVariety} 
-                onValueChange={setSelectedVariety}
-                disabled={!selectedCategory}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select variety" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredVarieties.map((variety) => (
-                    <SelectItem key={variety.id} value={variety.name}>
-                      {variety.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Quantity (boxes)</label>
+      <div className="container mx-auto px-4 py-6 pb-24">
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Left Side - Item Selection */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                type="number"
-                placeholder="Enter quantity"
-                value={saleQuantity}
-                onChange={(e) => setSaleQuantity(e.target.value)}
-                min="1"
+                placeholder="Search ice cream..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
               />
             </div>
 
-            <Button 
-              onClick={handleSale}
-              className="w-full h-12 text-lg bg-[hsl(var(--raspberry))] hover:bg-[hsl(var(--raspberry))]/90 text-white"
-            >
-              Record Sale
-            </Button>
-          </div>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="glass rounded-2xl p-4 shadow-[var(--shadow-card)]">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="w-5 h-5 text-[hsl(var(--raspberry))]" />
-              <span className="text-sm text-muted-foreground">Sales</span>
+            {/* Category Filters */}
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => (
+                <Badge
+                  key={category}
+                  variant={selectedCategories.includes(category) ? "default" : "outline"}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => toggleCategory(category)}
+                >
+                  {category}
+                </Badge>
+              ))}
+              {selectedCategories.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedCategories([])}
+                  className="h-auto py-1 px-2 text-xs"
+                >
+                  Clear
+                </Button>
+              )}
             </div>
-            <div className="text-3xl font-bold text-[hsl(var(--raspberry))]">{totalSales}</div>
-            <div className="text-xs text-muted-foreground mt-1">boxes sold</div>
+
+            {/* Item Grid */}
+            <ScrollArea className="h-[calc(100vh-350px)]">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {filteredVarieties.map((variety) => (
+                  <button
+                    key={variety.id}
+                    onClick={() => addToCart(variety.id, variety.name, variety.category)}
+                    className="glass rounded-xl p-4 text-left hover:shadow-lg transition-all hover:scale-105 active:scale-95 border-2 border-transparent hover:border-primary"
+                  >
+                    <div className="font-medium text-sm mb-1">{variety.name}</div>
+                    <div className="text-xs text-muted-foreground">{variety.category}</div>
+                    <div className="text-lg font-bold text-primary mt-2">₹60</div>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
 
-          <div className="glass rounded-2xl p-4 shadow-[var(--shadow-card)]">
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="w-5 h-5 text-[hsl(var(--mint))]" />
-              <span className="text-sm text-muted-foreground">Stock</span>
-            </div>
-            <div className="text-3xl font-bold text-[hsl(var(--mint))]">{totalStock}</div>
-            <div className="text-xs text-muted-foreground mt-1">total boxes</div>
-          </div>
+          {/* Right Side - Bill Panel */}
+          <div className="lg:col-span-1">
+            <div className="glass rounded-2xl p-5 shadow-[var(--shadow-card)] border-2 border-primary/20 sticky top-24">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-primary" />
+                  {editingOrderId ? "Edit Order" : "Current Bill"}
+                </h2>
+                {editingOrderId && (
+                  <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
 
-          <div className="glass rounded-2xl p-4 shadow-[var(--shadow-card)]">
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="w-5 h-5 text-[hsl(var(--mango))]" />
-              <span className="text-sm text-muted-foreground">Remaining</span>
-            </div>
-            <div className="text-3xl font-bold text-[hsl(var(--mango))]">{totalRemaining}</div>
-            <div className="text-xs text-muted-foreground mt-1">in stock</div>
-          </div>
+              {/* Cart Items */}
+              <ScrollArea className="h-[300px] mb-4">
+                {cart.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">No items added</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cart.map((item) => (
+                      <div key={item.varietyId} className="glass-dark rounded-lg p-3">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{item.variety}</div>
+                            <div className="text-xs text-muted-foreground">{item.category}</div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFromCart(item.varietyId)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateQuantity(item.varietyId, item.quantity - 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              -
+                            </Button>
+                            <Input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => updateQuantity(item.varietyId, parseInt(e.target.value) || 0)}
+                              className="w-16 h-7 text-center"
+                              min="0"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateQuantity(item.varietyId, item.quantity + 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              +
+                            </Button>
+                          </div>
+                          <div className="font-bold">₹{item.total}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
 
-          <div className="glass rounded-2xl p-4 shadow-[var(--shadow-card)]">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-5 h-5 text-green-600" />
-              <span className="text-sm text-muted-foreground">Profit</span>
-            </div>
-            <div className="text-3xl font-bold text-green-600">₹{totalProfit}</div>
-            <div className="text-xs text-muted-foreground mt-1">today</div>
-          </div>
-        </div>
-
-        {/* Category Breakdown */}
-        <div className="glass rounded-2xl p-5 shadow-[var(--shadow-card)]">
-          <h2 className="text-lg font-semibold mb-4">Category Performance</h2>
-          <div className="space-y-3">
-            {categoryBreakdown.map(({ category, sales }) => (
-              <div key={category} className="flex items-center justify-between">
-                <CategoryChip category={category} />
-                <div className="text-right">
-                  <div className="text-xl font-bold">{sales}</div>
-                  <div className="text-xs text-muted-foreground">boxes</div>
+              {/* Total */}
+              <div className="border-t border-border pt-4 mb-4">
+                <div className="flex items-center justify-between text-2xl font-bold">
+                  <span>Total</span>
+                  <span className="text-primary">₹{cartTotal}</span>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Top Sellers */}
-        <div className="glass rounded-2xl p-5 shadow-[var(--shadow-card)]">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-[hsl(var(--raspberry))]" />
-            Top Sellers
-          </h2>
-          <div className="space-y-3">
-            {topSellers.map((record, idx) => (
-              <div key={record.id} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[hsl(var(--raspberry))] text-white flex items-center justify-center font-bold text-sm">
-                  {idx + 1}
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium">{record.variety}</div>
-                  <div className="text-xs text-muted-foreground">{record.category}</div>
-                </div>
-                <div className="text-xl font-bold text-[hsl(var(--raspberry))]">
-                  {record.sales}
-                </div>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  onClick={() => createOrder("unpaid")}
+                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  disabled={cart.length === 0}
+                >
+                  Unpaid
+                </Button>
+                <Button
+                  onClick={() => createOrder("paid")}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  disabled={cart.length === 0}
+                >
+                  Paid
+                </Button>
               </div>
-            ))}
+            </div>
           </div>
         </div>
 
-        {/* Low Stock Alert */}
-        {lowStock.length > 0 && (
-          <div className="glass rounded-2xl p-5 shadow-[var(--shadow-card)] border-2 border-destructive/20">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-destructive">
-              <Package className="w-5 h-5" />
-              Low Stock Alert
-            </h2>
-            <div className="space-y-3">
-              {lowStock.map((record) => (
-                <div key={record.id} className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{record.variety}</div>
-                    <div className="text-xs text-muted-foreground">{record.category}</div>
+        {/* Order History */}
+        {orders.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold mb-4">Order History</h2>
+            <div className="space-y-2">
+              {orders.map((order) => (
+                <button
+                  key={order.id}
+                  onClick={() => loadOrder(order)}
+                  disabled={order.status === "paid"}
+                  className={`w-full glass rounded-xl p-4 text-left transition-all border-2 ${
+                    order.status === "paid"
+                      ? "opacity-60 cursor-not-allowed border-green-500/30"
+                      : "hover:shadow-lg hover:border-primary cursor-pointer"
+                  } ${editingOrderId === order.id ? "border-primary bg-primary/5" : "border-transparent"}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
+                        #{order.orderNumber}
+                      </div>
+                      <div>
+                        <div className="font-medium">Order #{order.orderNumber}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(order.timestamp).toLocaleString()}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {order.items.length} item(s)
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold">₹{order.total}</div>
+                      <Badge
+                        variant={order.status === "paid" ? "default" : "destructive"}
+                        className={order.status === "paid" ? "bg-green-600" : ""}
+                      >
+                        {order.status.toUpperCase()}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-xl font-bold text-destructive">
-                    {record.remaining}
-                  </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
         )}
-
       </div>
 
       {/* Bottom Navigation */}

@@ -38,3 +38,21 @@ export interface PriceConfig {
   sellingPrice: number;
   cost: number;
 }
+
+export interface OrderItem {
+  varietyId: string;
+  variety: string;
+  category: Category;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: number;
+  items: OrderItem[];
+  total: number;
+  status: "paid" | "unpaid";
+  timestamp: string;
+}
