@@ -1,13 +1,22 @@
-import { useState, useMemo } from "react";
-import { varieties } from "@/lib/mockData";
+import { useState, useMemo, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Category, Order, OrderItem } from "@/lib/types";
-import { Search, ShoppingCart, Home as HomeIcon, DollarSign, BarChart3, ClipboardList, X } from "lucide-react";
+import { Search, ShoppingCart, Home as HomeIcon, DollarSign, BarChart3, ClipboardList, X, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+interface Variety {
+  id: string;
+  name: string;
+  category: Category;
+  stock: number;
+  cost: number;
+  selling_price: number;
+}
 
 const Home = () => {
   const navigate = useNavigate();
@@ -16,8 +25,66 @@ const Home = () => {
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [varieties, setVarieties] = useState<Variety[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const categories: Category[] = ["WATER BASE", "MILK BASE", "FAMILY PACK", "4L TUBS"];
+
+  useEffect(() => {
+    fetchVarieties();
+    fetchOrders();
+  }, []);
+
+  const fetchVarieties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("varieties")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      setVarieties((data as Variety[]) || []);
+    } catch (error) {
+      console.error("Error fetching varieties:", error);
+      toast.error("Failed to load varieties");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .order("timestamp", { ascending: false });
+      
+      if (error) throw error;
+      
+      const formattedOrders: Order[] = (data || []).map((order: any) => ({
+        id: order.id,
+        orderNumber: order.order_number,
+        items: order.order_items.map((item: any) => ({
+          varietyId: item.variety_id,
+          variety: item.variety_name,
+          category: item.category as Category,
+          quantity: item.quantity,
+          price: parseFloat(item.price),
+          total: parseFloat(item.total),
+        })),
+        total: parseFloat(order.total),
+        status: order.status as "paid" | "unpaid",
+        timestamp: order.timestamp,
+      }));
+      
+      setOrders(formattedOrders);
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+    }
+  };
 
   // Filter varieties based on search and selected categories
   const filteredVarieties = useMemo(() => {
@@ -34,7 +101,7 @@ const Home = () => {
     }
     
     return filtered;
-  }, [searchQuery, selectedCategories]);
+  }, [searchQuery, selectedCategories, varieties]);
 
   const toggleCategory = (category: Category) => {
     setSelectedCategories(prev => 
@@ -44,38 +111,54 @@ const Home = () => {
     );
   };
 
-  const addToCart = (varietyId: string, varietyName: string, category: Category) => {
-    const existingItem = cart.find(item => item.varietyId === varietyId);
-    const price = 60; // Default price
+  const addToCart = (variety: Variety) => {
+    // Check if enough stock is available
+    const currentInCart = cart.find(item => item.varietyId === variety.id)?.quantity || 0;
+    if (variety.stock <= currentInCart) {
+      toast.error(`Not enough stock for ${variety.name}`);
+      return;
+    }
+
+    const existingItem = cart.find(item => item.varietyId === variety.id);
     
     if (existingItem) {
-      setCart(cart.map(item => 
-        item.varietyId === varietyId 
-          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * price }
+      setCart(cart.map(item =>
+        item.varietyId === variety.id
+          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
           : item
       ));
     } else {
+      const price = variety.selling_price;
       setCart([...cart, {
-        varietyId,
-        variety: varietyName,
-        category,
+        varietyId: variety.id,
+        variety: variety.name,
+        category: variety.category,
         quantity: 1,
         price,
-        total: price
+        total: price,
       }]);
     }
+    toast.success(`${variety.name} added to cart`);
   };
 
-  const updateQuantity = (varietyId: string, quantity: number) => {
-    if (quantity <= 0) {
-      setCart(cart.filter(item => item.varietyId !== varietyId));
-    } else {
-      setCart(cart.map(item => 
-        item.varietyId === varietyId 
-          ? { ...item, quantity, total: quantity * item.price }
-          : item
-      ));
+  const updateQuantity = (varietyId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(varietyId);
+      return;
     }
+
+    // Check stock availability
+    const variety = varieties.find(v => v.id === varietyId);
+    if (variety && newQuantity > variety.stock) {
+      toast.error(`Only ${variety.stock} units available`);
+      return;
+    }
+    
+    setCart(cart.map(item =>
+      item.varietyId === varietyId
+        ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
+        : item
+    ));
   };
 
   const removeFromCart = (varietyId: string) => {
@@ -84,73 +167,150 @@ const Home = () => {
 
   const cartTotal = cart.reduce((sum, item) => sum + item.total, 0);
 
-  const createOrder = (status: "paid" | "unpaid") => {
+  const createOrder = async (status: "paid" | "unpaid") => {
     if (cart.length === 0) {
-      toast({
-        title: "Empty Cart",
-        description: "Please add items to the cart first",
-        variant: "destructive",
-      });
+      toast.error("Cart is empty");
       return;
     }
 
-    if (editingOrderId) {
-      // Update existing order
-      setOrders(orders.map(order => 
-        order.id === editingOrderId 
-          ? { ...order, items: cart, total: cartTotal, status }
-          : order
-      ));
-      toast({
-        title: status === "paid" ? "Order Paid!" : "Order Updated",
-        description: `Order updated - Total: ₹${cartTotal}`,
-      });
-      setEditingOrderId(null);
-    } else {
-      // Create new order
-      const newOrder: Order = {
-        id: `order-${Date.now()}`,
-        orderNumber: orders.length + 1,
-        items: cart,
-        total: cartTotal,
-        status,
-        timestamp: new Date().toISOString(),
-      };
-      setOrders([newOrder, ...orders]);
-      toast({
-        title: status === "paid" ? "Order Paid!" : "Order Created",
-        description: `Order #${newOrder.orderNumber} - Total: ₹${cartTotal}`,
-      });
-    }
+    try {
+      if (status === "paid") {
+        // Check stock availability for all items
+        for (const item of cart) {
+          const variety = varieties.find(v => v.id === item.varietyId);
+          if (!variety || variety.stock < item.quantity) {
+            toast.error(`Not enough stock for ${item.variety}`);
+            return;
+          }
+        }
 
-    // Clear cart
-    setCart([]);
+        if (editingOrderId) {
+          // Update existing order
+          const { error: updateError } = await supabase
+            .from("orders")
+            .update({ total: cartTotal, status })
+            .eq("id", editingOrderId);
+
+          if (updateError) throw updateError;
+
+          // Delete old order items
+          await supabase
+            .from("order_items")
+            .delete()
+            .eq("order_id", editingOrderId);
+
+          // Insert new order items
+          const orderItems = cart.map(item => ({
+            order_id: editingOrderId,
+            variety_id: item.varietyId,
+            variety_name: item.variety,
+            category: item.category,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          }));
+
+          const { error: itemsError } = await supabase
+            .from("order_items")
+            .insert(orderItems);
+
+          if (itemsError) throw itemsError;
+
+          // Update stock for all items
+          for (const item of cart) {
+            const variety = varieties.find(v => v.id === item.varietyId);
+            if (variety) {
+              await supabase
+                .from("varieties")
+                .update({ stock: variety.stock - item.quantity })
+                .eq("id", item.varietyId);
+            }
+          }
+
+          toast.success("Order updated and paid");
+          setEditingOrderId(null);
+        } else {
+          // Get next order number
+          const { data: maxOrderData } = await supabase
+            .from("orders")
+            .select("order_number")
+            .order("order_number", { ascending: false })
+            .limit(1)
+            .single();
+
+          const nextOrderNumber = maxOrderData ? maxOrderData.order_number + 1 : 1;
+
+          // Create new order
+          const { data: orderData, error: orderError } = await supabase
+            .from("orders")
+            .insert({
+              order_number: nextOrderNumber,
+              total: cartTotal,
+              status,
+            })
+            .select()
+            .single();
+
+          if (orderError) throw orderError;
+
+          // Insert order items
+          const orderItems = cart.map(item => ({
+            order_id: orderData.id,
+            variety_id: item.varietyId,
+            variety_name: item.variety,
+            category: item.category,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          }));
+
+          const { error: itemsError } = await supabase
+            .from("order_items")
+            .insert(orderItems);
+
+          if (itemsError) throw itemsError;
+
+          // Update stock for all items
+          for (const item of cart) {
+            const variety = varieties.find(v => v.id === item.varietyId);
+            if (variety) {
+              await supabase
+                .from("varieties")
+                .update({ stock: variety.stock - item.quantity })
+                .eq("id", item.varietyId);
+            }
+          }
+
+          toast.success(`Order #${nextOrderNumber} completed`);
+        }
+
+        // Refresh data
+        await fetchVarieties();
+        await fetchOrders();
+        setCart([]);
+      } else {
+        toast.info("Only paid orders are saved to the database");
+      }
+    } catch (error) {
+      console.error("Error creating order:", error);
+      toast.error("Failed to create order");
+    }
   };
 
   const loadOrder = (order: Order) => {
     if (order.status === "paid") {
-      toast({
-        title: "Order Locked",
-        description: "Paid orders cannot be edited",
-        variant: "destructive",
-      });
+      toast.error("Paid orders cannot be edited");
       return;
     }
     setCart(order.items);
     setEditingOrderId(order.id);
-    toast({
-      title: "Order Loaded",
-      description: `Order #${order.orderNumber} loaded for editing`,
-    });
+    toast.success(`Order #${order.orderNumber} loaded for editing`);
   };
 
   const cancelEdit = () => {
     setEditingOrderId(null);
     setCart([]);
-    toast({
-      title: "Edit Cancelled",
-      description: "Cart cleared",
-    });
+    toast.info("Edit cancelled");
   };
 
   return (
@@ -207,17 +367,32 @@ const Home = () => {
             {/* Item Grid */}
             <ScrollArea className="h-[calc(100vh-350px)]">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {filteredVarieties.map((variety) => (
-                  <button
-                    key={variety.id}
-                    onClick={() => addToCart(variety.id, variety.name, variety.category)}
-                    className="glass rounded-xl p-4 text-left hover:shadow-lg transition-all hover:scale-105 active:scale-95 border-2 border-transparent hover:border-primary"
-                  >
-                    <div className="font-medium text-sm mb-1">{variety.name}</div>
-                    <div className="text-xs text-muted-foreground">{variety.category}</div>
-                    <div className="text-lg font-bold text-primary mt-2">₹60</div>
-                  </button>
-                ))}
+                {filteredVarieties.map((variety) => {
+                  const isLowStock = variety.stock < 5;
+                  return (
+                    <button
+                      key={variety.id}
+                      onClick={() => addToCart(variety)}
+                      className={`glass rounded-xl p-4 text-left hover:shadow-lg transition-all hover:scale-105 active:scale-95 border-2 ${
+                        isLowStock 
+                          ? "border-red-500 bg-red-50 dark:bg-red-950/20" 
+                          : "border-transparent hover:border-primary"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-medium text-sm mb-1">{variety.name}</div>
+                        <Package className={`w-4 h-4 ${isLowStock ? 'text-red-500' : 'text-[hsl(var(--mint))]'}`} />
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-2">{variety.category}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-lg font-bold text-primary">₹{variety.selling_price}</div>
+                        <div className={`text-xs ${isLowStock ? 'text-red-600 font-bold' : 'text-muted-foreground'}`}>
+                          Stock: {variety.stock}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </ScrollArea>
           </div>

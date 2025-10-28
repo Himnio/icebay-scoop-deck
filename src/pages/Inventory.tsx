@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { getTodayRecords } from "@/lib/mockData";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Category } from "@/lib/types";
 import { CategoryChip } from "@/components/CategoryChip";
 import { ArrowLeft, Search, Package } from "lucide-react";
@@ -7,17 +7,47 @@ import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
+interface Variety {
+  id: string;
+  name: string;
+  category: Category;
+  stock: number;
+  cost: number;
+  selling_price: number;
+}
+
 const Inventory = () => {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const [varieties, setVarieties] = useState<Variety[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchVarieties();
+  }, []);
+
+  const fetchVarieties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("varieties")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      setVarieties((data as Variety[]) || []);
+    } catch (error) {
+      console.error("Error fetching varieties:", error);
+      toast.error("Failed to load inventory");
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  const todayRecords = getTodayRecords();
-  
-  const filteredRecords = todayRecords.filter((record) => {
-    const matchesCategory = !selectedCategory || record.category === selectedCategory;
-    const matchesSearch = record.variety.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredRecords = varieties.filter((variety) => {
+    const matchesCategory = !selectedCategory || variety.category === selectedCategory;
+    const matchesSearch = variety.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -27,39 +57,50 @@ const Inventory = () => {
     setInputValues(prev => ({ ...prev, [id]: value }));
   };
 
-  const handleStockSubmit = (id: string, varietyName: string, currentStock: number) => {
+  const handleStockSubmit = async (id: string, varietyName: string, currentStock: number) => {
     const value = inputValues[id];
     if (!value || value.trim() === "") return;
 
     const trimmedValue = value.trim();
     let newStock = currentStock;
-    let operation = "";
 
     if (trimmedValue.startsWith("+")) {
       const addAmount = parseInt(trimmedValue.substring(1));
       if (!isNaN(addAmount)) {
         newStock = currentStock + addAmount;
-        operation = `+${addAmount}`;
       }
     } else if (trimmedValue.startsWith("-")) {
       const subtractAmount = parseInt(trimmedValue.substring(1));
       if (!isNaN(subtractAmount)) {
         newStock = Math.max(0, currentStock - subtractAmount);
-        operation = `-${subtractAmount}`;
       }
     } else {
       const directValue = parseInt(trimmedValue);
       if (!isNaN(directValue)) {
         newStock = Math.max(0, directValue);
-        operation = `set to ${directValue}`;
       }
     }
 
     if (newStock !== currentStock) {
-      toast.success(`${varietyName} updated`, {
-        description: `Stock: ${currentStock} → ${newStock}`,
-        duration: 2000,
-      });
+      try {
+        const { error } = await supabase
+          .from("varieties")
+          .update({ stock: newStock })
+          .eq("id", id);
+
+        if (error) throw error;
+
+        toast.success(`${varietyName} updated`, {
+          description: `Stock: ${currentStock} → ${newStock}`,
+          duration: 2000,
+        });
+
+        // Refresh varieties
+        await fetchVarieties();
+      } catch (error) {
+        console.error("Error updating stock:", error);
+        toast.error("Failed to update stock");
+      }
     }
 
     // Clear input
@@ -127,28 +168,26 @@ const Inventory = () => {
 
         {/* Inventory Cards */}
         <div className="grid gap-4">
-          {filteredRecords.map((record) => (
-            <div key={record.id} className="glass rounded-xl p-4 shadow-[var(--shadow-card)]">
+          {filteredRecords.map((variety) => (
+            <div key={variety.id} className="glass rounded-xl p-4 shadow-[var(--shadow-card)]">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{record.variety}</h3>
-                  <CategoryChip category={record.category} />
+                  <h3 className="font-semibold text-lg">{variety.name}</h3>
+                  <CategoryChip category={variety.category} />
                 </div>
                 <Package className="w-5 h-5 text-[hsl(var(--mint))]" />
               </div>
 
-              <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+              <div className="grid grid-cols-2 gap-2 mb-3 text-center">
                 <div>
-                  <div className="text-xs text-muted-foreground">Stock</div>
-                  <div className="text-lg font-bold text-[hsl(var(--mint))]">{record.stock}</div>
+                  <div className="text-xs text-muted-foreground">Current Stock</div>
+                  <div className={`text-lg font-bold ${variety.stock < 5 ? 'text-red-600' : 'text-[hsl(var(--mint))]'}`}>
+                    {variety.stock}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Remaining</div>
-                  <div className="text-lg font-bold text-[hsl(var(--mango))]">{record.remaining}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Sales</div>
-                  <div className="text-lg font-bold text-[hsl(var(--raspberry))]">{record.sales}</div>
+                  <div className="text-xs text-muted-foreground">Selling Price</div>
+                  <div className="text-lg font-bold text-[hsl(var(--mango))]">₹{variety.selling_price}</div>
                 </div>
               </div>
 
@@ -159,11 +198,11 @@ const Inventory = () => {
                 <Input
                   type="text"
                   placeholder="Type and press Enter"
-                  value={inputValues[record.id] || ""}
-                  onChange={(e) => handleStockChange(record.id, e.target.value)}
+                  value={inputValues[variety.id] || ""}
+                  onChange={(e) => handleStockChange(variety.id, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      handleStockSubmit(record.id, record.variety, record.stock);
+                      handleStockSubmit(variety.id, variety.name, variety.stock);
                     }
                   }}
                   className="text-center h-11"

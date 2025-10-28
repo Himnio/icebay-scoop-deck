@@ -14,7 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      order_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          order_id: string
+          price: number
+          quantity: number
+          total: number
+          variety_id: string
+          variety_name: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          order_id: string
+          price: number
+          quantity: number
+          total: number
+          variety_id: string
+          variety_name: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          order_id?: string
+          price?: number
+          quantity?: number
+          total?: number
+          variety_id?: string
+          variety_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_variety_id_fkey"
+            columns: ["variety_id"]
+            isOneToOne: false
+            referencedRelation: "varieties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          id: string
+          order_number: number
+          status: string
+          timestamp: string
+          total: number
+        }
+        Insert: {
+          id?: string
+          order_number: number
+          status: string
+          timestamp?: string
+          total: number
+        }
+        Update: {
+          id?: string
+          order_number?: number
+          status?: string
+          timestamp?: string
+          total?: number
+        }
+        Relationships: []
+      }
+      varieties: {
+        Row: {
+          category: string
+          cost: number
+          created_at: string
+          id: string
+          name: string
+          selling_price: number
+          stock: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          cost?: number
+          created_at?: string
+          id?: string
+          name: string
+          selling_price?: number
+          stock?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          cost?: number
+          created_at?: string
+          id?: string
+          name?: string
+          selling_price?: number
+          stock?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
