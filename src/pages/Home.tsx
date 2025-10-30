@@ -24,7 +24,9 @@ const Home = () => {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editingIsUnpaid, setEditingIsUnpaid] = useState(false);
   const [varieties, setVarieties] = useState<Variety[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -185,36 +187,85 @@ const Home = () => {
         }
 
         if (editingOrderId) {
-          // Update existing order
-          const { error: updateError } = await supabase
-            .from("orders")
-            .update({ total: cartTotal, status })
-            .eq("id", editingOrderId);
+          if (editingIsUnpaid) {
+            // Remove from unpaid orders and save to database
+            setUnpaidOrders(prev => prev.filter(o => o.id !== editingOrderId));
+            
+            // Get next order number
+            const { data: maxOrderData } = await supabase
+              .from("orders")
+              .select("order_number")
+              .order("order_number", { ascending: false })
+              .limit(1)
+              .single();
 
-          if (updateError) throw updateError;
+            const nextOrderNumber = maxOrderData ? maxOrderData.order_number + 1 : 1;
 
-          // Delete old order items
-          await supabase
-            .from("order_items")
-            .delete()
-            .eq("order_id", editingOrderId);
+            // Create new order
+            const { data: orderData, error: orderError } = await supabase
+              .from("orders")
+              .insert({
+                order_number: nextOrderNumber,
+                total: cartTotal,
+                status,
+              })
+              .select()
+              .single();
 
-          // Insert new order items
-          const orderItems = cart.map(item => ({
-            order_id: editingOrderId,
-            variety_id: item.varietyId,
-            variety_name: item.variety,
-            category: item.category,
-            quantity: item.quantity,
-            price: item.price,
-            total: item.total,
-          }));
+            if (orderError) throw orderError;
 
-          const { error: itemsError } = await supabase
-            .from("order_items")
-            .insert(orderItems);
+            // Insert order items
+            const orderItems = cart.map(item => ({
+              order_id: orderData.id,
+              variety_id: item.varietyId,
+              variety_name: item.variety,
+              category: item.category,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.total,
+            }));
 
-          if (itemsError) throw itemsError;
+            const { error: itemsError } = await supabase
+              .from("order_items")
+              .insert(orderItems);
+
+            if (itemsError) throw itemsError;
+
+            toast.success(`Order #${nextOrderNumber} saved and paid`);
+          } else {
+            // Update existing paid order
+            const { error: updateError } = await supabase
+              .from("orders")
+              .update({ total: cartTotal, status })
+              .eq("id", editingOrderId);
+
+            if (updateError) throw updateError;
+
+            // Delete old order items
+            await supabase
+              .from("order_items")
+              .delete()
+              .eq("order_id", editingOrderId);
+
+            // Insert new order items
+            const orderItems = cart.map(item => ({
+              order_id: editingOrderId,
+              variety_id: item.varietyId,
+              variety_name: item.variety,
+              category: item.category,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.total,
+            }));
+
+            const { error: itemsError } = await supabase
+              .from("order_items")
+              .insert(orderItems);
+
+            if (itemsError) throw itemsError;
+
+            toast.success("Order updated and paid");
+          }
 
           // Update stock for all items
           for (const item of cart) {
@@ -227,8 +278,8 @@ const Home = () => {
             }
           }
 
-          toast.success("Order updated and paid");
           setEditingOrderId(null);
+          setEditingIsUnpaid(false);
         } else {
           // Get next order number
           const { data: maxOrderData } = await supabase
@@ -289,7 +340,39 @@ const Home = () => {
         await fetchOrders();
         setCart([]);
       } else {
-        toast.info("Only paid orders are saved to the database");
+        // Handle unpaid orders - store locally only
+        if (editingOrderId && editingIsUnpaid) {
+          // Update existing unpaid order
+          setUnpaidOrders(prev => prev.map(o => 
+            o.id === editingOrderId 
+              ? { ...o, items: cart, total: cartTotal, timestamp: new Date().toISOString() }
+              : o
+          ));
+          toast.success("Unpaid order updated");
+        } else {
+          // Create new unpaid order
+          const nextOrderNumber = Math.max(
+            ...orders.map(o => o.orderNumber),
+            ...unpaidOrders.map(o => o.orderNumber),
+            0
+          ) + 1;
+          
+          const newUnpaidOrder: Order = {
+            id: `unpaid-${Date.now()}`,
+            orderNumber: nextOrderNumber,
+            items: [...cart],
+            total: cartTotal,
+            status: "unpaid",
+            timestamp: new Date().toISOString(),
+          };
+          
+          setUnpaidOrders(prev => [newUnpaidOrder, ...prev]);
+          toast.success(`Unpaid order #${nextOrderNumber} created`);
+        }
+        
+        setCart([]);
+        setEditingOrderId(null);
+        setEditingIsUnpaid(false);
       }
     } catch (error) {
       console.error("Error creating order:", error);
@@ -304,11 +387,13 @@ const Home = () => {
     }
     setCart(order.items);
     setEditingOrderId(order.id);
+    setEditingIsUnpaid(order.status === "unpaid");
     toast.success(`Order #${order.orderNumber} loaded for editing`);
   };
 
   const cancelEdit = () => {
     setEditingOrderId(null);
+    setEditingIsUnpaid(false);
     setCart([]);
     toast.info("Edit cancelled");
   };
@@ -501,11 +586,11 @@ const Home = () => {
         </div>
 
         {/* Order History */}
-        {orders.length > 0 && (
+        {(orders.length > 0 || unpaidOrders.length > 0) && (
           <div className="mt-8">
             <h2 className="text-xl font-semibold mb-4">Order History</h2>
             <div className="space-y-2">
-              {orders.map((order) => (
+              {[...unpaidOrders, ...orders].map((order) => (
                 <button
                   key={order.id}
                   onClick={() => loadOrder(order)}
