@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, ShoppingCart, Percent } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   LineChart,
   Line,
@@ -36,6 +37,12 @@ const Analytics = () => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState({
+    totalSales: 0,
+    totalProfit: 0,
+    totalOrders: 0,
+    profitMargin: 0,
+  });
 
   useEffect(() => {
     fetchAnalyticsData();
@@ -62,6 +69,10 @@ const Analytics = () => {
       // Process daily data
       const dailyMap = new Map<string, { sales: number; profit: number }>();
       const categoryMap = new Map<string, number>();
+      
+      let totalSales = 0;
+      let totalProfit = 0;
+      const totalOrders = orders?.length || 0;
 
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       
@@ -84,6 +95,9 @@ const Analytics = () => {
           sales: current.sales + orderTotal,
           profit: current.profit + orderProfit,
         });
+        
+        totalSales += orderTotal;
+        totalProfit += orderProfit;
 
         // Process category data
         for (const item of order.order_items) {
@@ -121,9 +135,17 @@ const Analytics = () => {
           color: colors[index % colors.length],
         })
       );
+      
+      const profitMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
 
       setDailyData(processedDailyData);
       setCategoryData(processedCategoryData);
+      setMetrics({
+        totalSales: Math.round(totalSales),
+        totalProfit: Math.round(totalProfit),
+        totalOrders,
+        profitMargin: Math.round(profitMargin),
+      });
     } catch (error) {
       console.error("Error fetching analytics:", error);
       toast.error("Failed to load analytics");
@@ -132,7 +154,13 @@ const Analytics = () => {
     }
   };
 
-  const COLORS = categoryData.map(cat => cat.color);
+  const COLORS = [
+    "hsl(var(--chart-1))",
+    "hsl(var(--chart-2))",
+    "hsl(var(--chart-3))",
+    "hsl(var(--chart-4))",
+    "hsl(var(--chart-5))",
+  ];
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -147,8 +175,8 @@ const Analytics = () => {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-xl font-bold">Analytics</h1>
-              <p className="text-sm text-muted-foreground">Last 7 days</p>
+              <h1 className="text-xl font-bold">Analytics Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Last 7 days performance</p>
             </div>
           </div>
         </div>
@@ -162,112 +190,218 @@ const Analytics = () => {
           </div>
         ) : (
           <>
-            {/* Daily Performance */}
-            <div className="glass rounded-xl p-6 shadow-[var(--shadow-card)]">
-              <h2 className="text-xl font-bold mb-4">Daily Performance (Last 7 Days)</h2>
-              {dailyData.length > 0 && dailyData.some(d => d.sales > 0) ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="hsl(var(--foreground))"
-                      tick={{ fill: "hsl(var(--foreground))" }}
-                    />
-                    <YAxis
-                      stroke="hsl(var(--foreground))"
-                      tick={{ fill: "hsl(var(--foreground))" }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="sales"
-                      stroke="hsl(var(--mint))"
-                      strokeWidth={2}
-                      name="Sales (₹)"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="profit"
-                      stroke="hsl(var(--raspberry))"
-                      strokeWidth={2}
-                      name="Profit (₹)"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">No sales data available for the last 7 days</p>
-              )}
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="bg-gradient-to-br from-mint/20 to-mint/5 border-mint/20">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Sales
+                  </CardTitle>
+                  <DollarSign className="h-5 w-5 text-mint" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₹{metrics.totalSales.toLocaleString()}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    From {metrics.totalOrders} orders
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-raspberry/20 to-raspberry/5 border-raspberry/20">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Profit
+                  </CardTitle>
+                  <TrendingUp className="h-5 w-5 text-raspberry" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₹{metrics.totalProfit.toLocaleString()}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {metrics.profitMargin}% margin
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-mango/20 to-mango/5 border-mango/20">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Orders
+                  </CardTitle>
+                  <ShoppingCart className="h-5 w-5 text-mango" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.totalOrders}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Completed transactions
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/20">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Profit Margin
+                  </CardTitle>
+                  <Percent className="h-5 w-5 text-primary" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.profitMargin}%</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Average profit rate
+                  </p>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Daily Performance */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {dailyData.length > 0 && dailyData.some(d => d.sales > 0) ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={dailyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.2} />
+                      <XAxis
+                        dataKey="date"
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="sales"
+                        stroke="hsl(var(--mint))"
+                        strokeWidth={3}
+                        name="Sales (₹)"
+                        dot={{ fill: "hsl(var(--mint))", r: 5 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="profit"
+                        stroke="hsl(var(--raspberry))"
+                        strokeWidth={3}
+                        name="Profit (₹)"
+                        dot={{ fill: "hsl(var(--raspberry))", r: 5 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center py-8 text-muted-foreground">No sales data available for the last 7 days</p>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Category Share */}
-            <div className="glass rounded-xl p-6 shadow-[var(--shadow-card)]">
-              <h2 className="text-xl font-bold mb-4">Category Sales (Last 7 Days)</h2>
-              {categoryData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) =>
-                        `${name}: ${(percent * 100).toFixed(0)}%`
-                      }
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {categoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            <Card>
+              <CardHeader>
+                <CardTitle>Category Sales Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {categoryData.length > 0 ? (
+                  <div className="space-y-4">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={categoryData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) =>
+                            `${name}: ${(percent * 100).toFixed(0)}%`
+                          }
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {categoryData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    
+                    {/* Category Legend */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {categoryData.map((cat, index) => (
+                        <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                          <div 
+                            className="w-4 h-4 rounded-full" 
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{cat.name}</p>
+                            <p className="text-xs text-muted-foreground">₹{cat.value.toLocaleString()}</p>
+                          </div>
+                        </div>
                       ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">No category data available</p>
-              )}
-            </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-center py-8 text-muted-foreground">No category data available</p>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Weekly Comparison */}
-            <div className="glass rounded-xl p-6 shadow-[var(--shadow-card)]">
-              <h2 className="text-xl font-bold mb-4">Weekly Comparison</h2>
-              {dailyData.length > 0 && dailyData.some(d => d.sales > 0) ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="hsl(var(--foreground))"
-                      tick={{ fill: "hsl(var(--foreground))" }}
-                    />
-                    <YAxis
-                      stroke="hsl(var(--foreground))"
-                      tick={{ fill: "hsl(var(--foreground))" }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="sales" fill="hsl(var(--mint))" name="Sales (₹)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">No comparison data available</p>
-              )}
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Sales Comparison</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {dailyData.length > 0 && dailyData.some(d => d.sales > 0) ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dailyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.2} />
+                      <XAxis
+                        dataKey="date"
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      />
+                      <Legend />
+                      <Bar 
+                        dataKey="sales" 
+                        fill="hsl(var(--mint))" 
+                        name="Sales (₹)" 
+                        radius={[8, 8, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center py-8 text-muted-foreground">No comparison data available</p>
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
       </div>

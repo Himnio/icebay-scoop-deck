@@ -76,6 +76,13 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Chart colors */
+    --chart-1: 330 100% 85%; /* Raspberry */
+    --chart-2: 145 50% 75%; /* Mint */
+    --chart-3: 43 100% 80%; /* Mango */
+    --chart-4: 280 70% 85%; /* Lavender */
+    --chart-5: 180 50% 80%; /* Sky */
   }
 
   .dark {
@@ -118,6 +125,13 @@ All colors MUST be HSL.
     
     --shadow-soft: 0 4px 20px -4px hsl(145 50% 65% / 0.2);
     --shadow-card: 0 8px 30px -8px hsl(0 0% 0% / 0.3);
+    
+    /* Chart colors - dark mode */
+    --chart-1: 330 80% 75%;
+    --chart-2: 145 50% 65%;
+    --chart-3: 43 90% 70%;
+    --chart-4: 280 60% 75%;
+    --chart-5: 180 50% 70%;
   }
 }
 
