@@ -404,7 +404,7 @@ const Home = () => {
       <header className="glass sticky top-0 z-10 border-b border-border">
         <div className="container mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-[hsl(var(--mint))] to-[hsl(var(--raspberry))] bg-clip-text text-transparent">
-            ICE BAY POS
+            ICE BAY DASHBOARD
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Point of Sale System</p>
         </div>
