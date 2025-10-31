@@ -406,7 +406,7 @@ const Home = () => {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-[hsl(var(--mint))] to-[hsl(var(--raspberry))] bg-clip-text text-transparent">
             ICE BAY DASHBOARD
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Point of Sale System</p>
+          {/* <p className="text-sm text-muted-foreground mt-1">Point of Sale System</p> */}
         </div>
       </header>
 
