@@ -55,9 +55,20 @@ const Admin = () => {
   }, []);
 
   const checkAuth = async () => {
+    // Bypass authentication in development
+    if (import.meta.env.DEV) {
+      console.warn('Running in development mode - bypassing authentication');
+      setIsAdmin(true);
+      // setUser({ email: 'dev@icebay.test' });
+      fetchVarieties();
+      setLoading(false);
+      return;
+    }
+
+    // Production authentication flow
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         navigate("/auth");
         return;
