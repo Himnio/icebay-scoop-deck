@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Category, Order, OrderItem } from "@/lib/types";
-import { Search, ShoppingCart, Home as HomeIcon, DollarSign, BarChart3, ClipboardList, X, Package } from "lucide-react";
+import { Search, ShoppingCart, X, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { FooterNav } from "@/components/FooterNav";
 
 interface Variety {
   id: string;
@@ -507,7 +508,7 @@ const Home = () => {
                 ) : (
                   <div className="space-y-3">
                     {cart.map((item) => (
-                      <div key={item.varietyId} className="glass-dark rounded-lg p-3">
+                      <div key={item.varietyId} className="bg-card border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <div className="font-medium text-sm">{item.variety}</div>
@@ -633,45 +634,7 @@ const Home = () => {
         )}
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 glass border-t border-border z-20">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-4 gap-2 py-3">
-            <Button
-              variant="ghost"
-              className="flex flex-col items-center gap-1 h-auto py-2"
-              onClick={() => navigate("/")}
-            >
-              <HomeIcon className="w-5 h-5 text-primary" />
-              <span className="text-xs font-medium">Home</span>
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex flex-col items-center gap-1 h-auto py-2"
-              onClick={() => navigate("/daily-stocks")}
-            >
-              <DollarSign className="w-5 h-5" />
-              <span className="text-xs">Daily Stocks</span>
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex flex-col items-center gap-1 h-auto py-2"
-              onClick={() => navigate("/inventory")}
-            >
-              <ClipboardList className="w-5 h-5" />
-              <span className="text-xs">Inventory</span>
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex flex-col items-center gap-1 h-auto py-2"
-              onClick={() => navigate("/analytics")}
-            >
-              <BarChart3 className="w-5 h-5" />
-              <span className="text-xs">Analytics</span>
-            </Button>
-          </div>
-        </div>
-      </nav>
+      <FooterNav />
     </div>
   );
 };

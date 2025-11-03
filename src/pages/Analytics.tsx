@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, TrendingUp, DollarSign, ShoppingCart, Percent } from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, ShoppingCart, Percent, Calendar as CalendarIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { FooterNav } from "@/components/FooterNav";
 import {
   LineChart,
   Line,
@@ -37,6 +42,10 @@ const Analytics = () => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    to: new Date(),
+  });
   const [metrics, setMetrics] = useState({
     totalSales: 0,
     totalProfit: 0,
@@ -46,13 +55,11 @@ const Analytics = () => {
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, []);
+  }, [dateRange]);
 
   const fetchAnalyticsData = async () => {
     try {
-      // Fetch orders from the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      setLoading(true);
 
       const { data: orders, error } = await supabase
         .from("orders")
@@ -61,7 +68,8 @@ const Analytics = () => {
           order_items (*)
         `)
         .eq("status", "paid")
-        .gte("timestamp", sevenDaysAgo.toISOString())
+        .gte("timestamp", dateRange.from.toISOString())
+        .lte("timestamp", dateRange.to.toISOString())
         .order("timestamp", { ascending: true });
 
       if (error) throw error;
@@ -154,6 +162,14 @@ const Analytics = () => {
     }
   };
 
+  const handleDateRangeSelect = (range: any) => {
+    if (range?.from && range?.to) {
+      setDateRange({ from: range.from, to: range.to });
+    } else if (range?.from) {
+      setDateRange({ from: range.from, to: range.from });
+    }
+  };
+
   const COLORS = [
     "hsl(var(--chart-1))",
     "hsl(var(--chart-2))",
@@ -167,17 +183,47 @@ const Analytics = () => {
       {/* Header */}
       <header className="glass sticky top-0 z-10 border-b border-border">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/")}
-              className="p-2 rounded-full hover:bg-muted transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold">Analytics Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Last 7 days performance</p>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate("/")}
+                className="p-2 rounded-full hover:bg-muted transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold">Analytics Dashboard</h1>
+                <p className="text-sm text-muted-foreground">Sales & performance metrics</p>
+              </div>
             </div>
+
+            {/* Date Range Picker */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="justify-start text-left font-normal"
+                >
+                  <CalendarIcon className="w-4 h-4 mr-2" />
+                  {dateRange.from && dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd, yyyy")}
+                    </>
+                  ) : (
+                    <span>Pick a date range</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={{ from: dateRange.from, to: dateRange.to }}
+                  onSelect={handleDateRangeSelect}
+                  numberOfMonths={2}
+                  className="pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>
@@ -405,6 +451,8 @@ const Analytics = () => {
           </>
         )}
       </div>
+
+      <FooterNav />
     </div>
   );
 };

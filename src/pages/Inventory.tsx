@@ -6,6 +6,7 @@ import { ArrowLeft, Search, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { FooterNav } from "@/components/FooterNav";
 
 interface Variety {
   id: string;
@@ -222,6 +223,8 @@ const Inventory = () => {
           </div>
         )}
       </div>
+
+      <FooterNav />
     </div>
   );
 };
