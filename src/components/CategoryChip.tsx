@@ -2,12 +2,13 @@ import { Category } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface CategoryChipProps {
-  category: Category;
+  category: Category | "ALL";
   active?: boolean;
   onClick?: () => void;
 }
 
-const categoryColors: Record<Category, string> = {
+const categoryColors: Record<Category | "ALL", string> = {
+  "ALL": "bg-primary text-primary-foreground",
   "WATER BASE": "bg-[hsl(var(--mint))] text-foreground",
   "MILK BASE": "bg-[hsl(var(--raspberry))] text-foreground",
   "FAMILY PACK": "bg-[hsl(var(--mango))] text-foreground",

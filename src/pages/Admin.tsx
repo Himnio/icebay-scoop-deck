@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { LogOut, Plus, Pencil, Trash2, DollarSign } from "lucide-react";
+import { LogOut, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { CategoryChip } from "@/components/CategoryChip";
 import { FooterNav } from "@/components/FooterNav";
 import {
   Dialog,
@@ -40,6 +41,8 @@ const Admin = () => {
   const [varieties, setVarieties] = useState<Variety[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVariety, setEditingVariety] = useState<Variety | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<Category | "ALL">("ALL");
   const [formData, setFormData] = useState({
     name: "",
     category: "" as Category,
@@ -198,6 +201,12 @@ const Admin = () => {
     });
   };
 
+  const filteredVarieties = varieties.filter((variety) => {
+    const matchesSearch = variety.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === "ALL" || variety.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -236,7 +245,7 @@ const Admin = () => {
 
       <div className="container mx-auto px-4 py-6 space-y-6">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold">Manage Varieties</h2>
+          <h2 className="text-xl font-semibold">Manage Varieties ({filteredVarieties.length})</h2>
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
             if (!open) resetForm();
@@ -368,8 +377,37 @@ const Admin = () => {
           </Dialog>
         </div>
 
+        {/* Search and Filter Section */}
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Search varieties..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          <div className="flex flex-wrap gap-2">
+            <CategoryChip
+              category="ALL"
+              active={selectedCategory === "ALL"}
+              onClick={() => setSelectedCategory("ALL")}
+            />
+            {categories.map((category) => (
+              <CategoryChip
+                key={category}
+                category={category}
+                active={selectedCategory === category}
+                onClick={() => setSelectedCategory(category)}
+              />
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-4">
-          {varieties.map((variety) => {
+          {filteredVarieties.map((variety) => {
             const profit = variety.selling_price - variety.cost;
             const profitMargin = variety.cost > 0 ? (profit / variety.cost) * 100 : 0;
 
