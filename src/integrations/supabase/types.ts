@@ -69,6 +69,7 @@ export type Database = {
         Row: {
           id: string
           order_number: number
+          payment_method: string | null
           status: string
           timestamp: string
           total: number
@@ -76,6 +77,7 @@ export type Database = {
         Insert: {
           id?: string
           order_number: number
+          payment_method?: string | null
           status: string
           timestamp?: string
           total: number
@@ -83,6 +85,7 @@ export type Database = {
         Update: {
           id?: string
           order_number?: number
+          payment_method?: string | null
           status?: string
           timestamp?: string
           total?: number

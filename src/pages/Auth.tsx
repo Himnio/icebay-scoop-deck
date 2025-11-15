@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Mail, Lock, LogIn } from "lucide-react";
+import { Mail, Lock, LogIn, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -91,6 +92,15 @@ const Auth = () => {
             {isSignUp ? "Create an account" : "Sign in to continue"}
           </p>
         </div>
+
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            <strong>Default Login:</strong><br />
+            Email: admin@icebay.com<br />
+            Password: admin123
+          </AlertDescription>
+        </Alert>
 
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div className="space-y-2">
