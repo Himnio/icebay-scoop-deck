@@ -55,4 +55,5 @@ export interface Order {
   total: number;
   status: "paid" | "unpaid";
   timestamp: string;
+  paymentMethod?: string;
 }

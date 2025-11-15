@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Category, Order, OrderItem } from "@/lib/types";
-import { Search, ShoppingCart, X, Package } from "lucide-react";
+import { Search, ShoppingCart, X, ChevronLeft, ChevronRight, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,15 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FooterNav } from "@/components/FooterNav";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 interface Variety {
   id: string;
@@ -25,11 +34,13 @@ const Home = () => {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
-  const [editingIsUnpaid, setEditingIsUnpaid] = useState(false);
   const [varieties, setVarieties] = useState<Variety[]>([]);
   const [loading, setLoading] = useState(true);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "online">("cash");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 10;
 
   const categories: Category[] = ["WATER BASE", "MILK BASE", "FAMILY PACK", "4L TUBS"];
 
@@ -81,6 +92,7 @@ const Home = () => {
         total: parseFloat(order.total),
         status: order.status as "paid" | "unpaid",
         timestamp: order.timestamp,
+        paymentMethod: order.payment_method,
       }));
       
       setOrders(formattedOrders);
@@ -176,6 +188,12 @@ const Home = () => {
       return;
     }
 
+    // Show payment method dialog for paid orders
+    if (status === "paid" && !editingOrderId) {
+      setPaymentDialogOpen(true);
+      return;
+    }
+
     try {
       if (status === "paid") {
         // Check stock availability for all items
@@ -188,87 +206,42 @@ const Home = () => {
         }
 
         if (editingOrderId) {
-          if (editingIsUnpaid) {
-            // Remove from unpaid orders and save to database
-            setUnpaidOrders(prev => prev.filter(o => o.id !== editingOrderId));
-            
-            // Get next order number
-            const { data: maxOrderData } = await supabase
-              .from("orders")
-              .select("order_number")
-              .order("order_number", { ascending: false })
-              .limit(1)
-              .single();
+          // Update existing order to paid
+          const { error: updateError } = await supabase
+            .from("orders")
+            .update({ 
+              total: cartTotal, 
+              status: "paid",
+              payment_method: paymentMethod 
+            })
+            .eq("id", editingOrderId);
 
-            const nextOrderNumber = maxOrderData ? maxOrderData.order_number + 1 : 1;
+          if (updateError) throw updateError;
 
-            // Create new order
-            const { data: orderData, error: orderError } = await supabase
-              .from("orders")
-              .insert({
-                order_number: nextOrderNumber,
-                total: cartTotal,
-                status,
-              })
-              .select()
-              .single();
+          // Delete old order items
+          await supabase
+            .from("order_items")
+            .delete()
+            .eq("order_id", editingOrderId);
 
-            if (orderError) throw orderError;
+          // Insert new order items
+          const orderItems = cart.map(item => ({
+            order_id: editingOrderId,
+            variety_id: item.varietyId,
+            variety_name: item.variety,
+            category: item.category,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          }));
 
-            // Insert order items
-            const orderItems = cart.map(item => ({
-              order_id: orderData.id,
-              variety_id: item.varietyId,
-              variety_name: item.variety,
-              category: item.category,
-              quantity: item.quantity,
-              price: item.price,
-              total: item.total,
-            }));
+          const { error: itemsError } = await supabase
+            .from("order_items")
+            .insert(orderItems);
 
-            const { error: itemsError } = await supabase
-              .from("order_items")
-              .insert(orderItems);
+          if (itemsError) throw itemsError;
 
-            if (itemsError) throw itemsError;
-
-            toast.success(`Order #${nextOrderNumber} saved and paid`);
-          } else {
-            // Update existing paid order
-            const { error: updateError } = await supabase
-              .from("orders")
-              .update({ total: cartTotal, status })
-              .eq("id", editingOrderId);
-
-            if (updateError) throw updateError;
-
-            // Delete old order items
-            await supabase
-              .from("order_items")
-              .delete()
-              .eq("order_id", editingOrderId);
-
-            // Insert new order items
-            const orderItems = cart.map(item => ({
-              order_id: editingOrderId,
-              variety_id: item.varietyId,
-              variety_name: item.variety,
-              category: item.category,
-              quantity: item.quantity,
-              price: item.price,
-              total: item.total,
-            }));
-
-            const { error: itemsError } = await supabase
-              .from("order_items")
-              .insert(orderItems);
-
-            if (itemsError) throw itemsError;
-
-            toast.success("Order updated and paid");
-          }
-
-          // Update stock for all items
+          // Update stock
           for (const item of cart) {
             const variety = varieties.find(v => v.id === item.varietyId);
             if (variety) {
@@ -279,33 +252,33 @@ const Home = () => {
             }
           }
 
-          setEditingOrderId(null);
-          setEditingIsUnpaid(false);
+          await fetchOrders();
+          await fetchVarieties();
+          toast.success("Order marked as paid");
         } else {
-          // Get next order number
+          // Create new paid order
           const { data: maxOrderData } = await supabase
             .from("orders")
             .select("order_number")
             .order("order_number", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           const nextOrderNumber = maxOrderData ? maxOrderData.order_number + 1 : 1;
 
-          // Create new order
           const { data: orderData, error: orderError } = await supabase
             .from("orders")
             .insert({
               order_number: nextOrderNumber,
               total: cartTotal,
-              status,
+              status: "paid",
+              payment_method: paymentMethod,
             })
             .select()
             .single();
 
           if (orderError) throw orderError;
 
-          // Insert order items
           const orderItems = cart.map(item => ({
             order_id: orderData.id,
             variety_id: item.varietyId,
@@ -322,7 +295,7 @@ const Home = () => {
 
           if (itemsError) throw itemsError;
 
-          // Update stock for all items
+          // Update stock
           for (const item of cart) {
             const variety = varieties.find(v => v.id === item.varietyId);
             if (variety) {
@@ -333,47 +306,95 @@ const Home = () => {
             }
           }
 
-          toast.success(`Order #${nextOrderNumber} completed`);
+          await fetchOrders();
+          await fetchVarieties();
+          toast.success(`Order #${nextOrderNumber} paid successfully`);
         }
-
-        // Refresh data
-        await fetchVarieties();
-        await fetchOrders();
+        
         setCart([]);
+        setEditingOrderId(null);
+        setPaymentDialogOpen(false);
       } else {
-        // Handle unpaid orders - store locally only
-        if (editingOrderId && editingIsUnpaid) {
+        // Create or update unpaid order
+        if (editingOrderId) {
           // Update existing unpaid order
-          setUnpaidOrders(prev => prev.map(o => 
-            o.id === editingOrderId 
-              ? { ...o, items: cart, total: cartTotal, timestamp: new Date().toISOString() }
-              : o
-          ));
+          const { error: updateError } = await supabase
+            .from("orders")
+            .update({ total: cartTotal })
+            .eq("id", editingOrderId);
+
+          if (updateError) throw updateError;
+
+          // Delete old order items
+          await supabase
+            .from("order_items")
+            .delete()
+            .eq("order_id", editingOrderId);
+
+          // Insert new order items
+          const orderItems = cart.map(item => ({
+            order_id: editingOrderId,
+            variety_id: item.varietyId,
+            variety_name: item.variety,
+            category: item.category,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          }));
+
+          const { error: itemsError } = await supabase
+            .from("order_items")
+            .insert(orderItems);
+
+          if (itemsError) throw itemsError;
+
+          await fetchOrders();
           toast.success("Unpaid order updated");
         } else {
           // Create new unpaid order
-          const nextOrderNumber = Math.max(
-            ...orders.map(o => o.orderNumber),
-            ...unpaidOrders.map(o => o.orderNumber),
-            0
-          ) + 1;
+          const { data: maxOrderData } = await supabase
+            .from("orders")
+            .select("order_number")
+            .order("order_number", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const nextOrderNumber = maxOrderData ? maxOrderData.order_number + 1 : 1;
           
-          const newUnpaidOrder: Order = {
-            id: `unpaid-${Date.now()}`,
-            orderNumber: nextOrderNumber,
-            items: [...cart],
-            total: cartTotal,
-            status: "unpaid",
-            timestamp: new Date().toISOString(),
-          };
-          
-          setUnpaidOrders(prev => [newUnpaidOrder, ...prev]);
+          const { data: orderData, error: orderError } = await supabase
+            .from("orders")
+            .insert({
+              order_number: nextOrderNumber,
+              total: cartTotal,
+              status: "unpaid",
+            })
+            .select()
+            .single();
+
+          if (orderError) throw orderError;
+
+          const orderItems = cart.map(item => ({
+            order_id: orderData.id,
+            variety_id: item.varietyId,
+            variety_name: item.variety,
+            category: item.category,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          }));
+
+          const { error: itemsError } = await supabase
+            .from("order_items")
+            .insert(orderItems);
+
+          if (itemsError) throw itemsError;
+
+          await fetchOrders();
           toast.success(`Unpaid order #${nextOrderNumber} created`);
         }
         
         setCart([]);
         setEditingOrderId(null);
-        setEditingIsUnpaid(false);
       }
     } catch (error) {
       console.error("Error creating order:", error);
@@ -388,16 +409,21 @@ const Home = () => {
     }
     setCart(order.items);
     setEditingOrderId(order.id);
-    setEditingIsUnpaid(order.status === "unpaid");
     toast.success(`Order #${order.orderNumber} loaded for editing`);
   };
 
   const cancelEdit = () => {
     setEditingOrderId(null);
-    setEditingIsUnpaid(false);
     setCart([]);
     toast.info("Edit cancelled");
   };
+
+  // Pagination
+  const totalPages = Math.ceil(orders.length / ordersPerPage);
+  const paginatedOrders = orders.slice(
+    (currentPage - 1) * ordersPerPage,
+    currentPage * ordersPerPage
+  );
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -582,16 +608,31 @@ const Home = () => {
                   Paid
                 </Button>
               </div>
+
+              {editingOrderId && (
+                <Button
+                  variant="outline"
+                  onClick={cancelEdit}
+                  className="w-full mt-2"
+                >
+                  Cancel Edit
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Order History */}
-        {(orders.length > 0 || unpaidOrders.length > 0) && (
+        {orders.length > 0 && (
           <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Order History</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Order History</h2>
+              <div className="text-sm text-muted-foreground">
+                Total: {orders.length} orders
+              </div>
+            </div>
             <div className="space-y-2">
-              {[...unpaidOrders, ...orders].map((order) => (
+              {paginatedOrders.map((order) => (
                 <button
                   key={order.id}
                   onClick={() => loadOrder(order)}
@@ -614,6 +655,7 @@ const Home = () => {
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {order.items.length} item(s)
+                          {order.paymentMethod && ` • ${order.paymentMethod.toUpperCase()}`}
                         </div>
                       </div>
                     </div>
@@ -630,9 +672,66 @@ const Home = () => {
                 </button>
               ))}
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Button>
+                <div className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Payment Method Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Payment Method</DialogTitle>
+            <DialogDescription>
+              Choose how the customer paid for this order
+            </DialogDescription>
+          </DialogHeader>
+          <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as "cash" | "online")}>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="cash" id="cash" />
+              <Label htmlFor="cash">Cash</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="online" id="online" />
+              <Label htmlFor="online">Online</Label>
+            </div>
+          </RadioGroup>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => createOrder("paid")} className="bg-green-600 hover:bg-green-700">
+              Confirm Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <FooterNav />
     </div>
