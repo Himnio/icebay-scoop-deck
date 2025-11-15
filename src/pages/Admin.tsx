@@ -58,17 +58,19 @@ const Admin = () => {
   }, []);
 
   const checkAuth = async () => {
-    // Bypass authentication in development
-    if (import.meta.env.DEV) {
-      console.warn('Running in development mode - bypassing authentication');
-      setIsAdmin(true);
-      // setUser({ email: 'dev@icebay.test' });
-      fetchVarieties();
-      setLoading(false);
-      return;
-    }
+    // Bypass authentication for all environments (development and production)
+    // NOTE: For production authentication, uncomment the code below and remove the bypass
+    
+    console.warn('Bypassing authentication - Admin access is unrestricted');
+    setIsAdmin(true);
+    // setUser({ email: 'admin@icebay.test' });
+    fetchVarieties();
+    setLoading(false);
 
-    // Production authentication flow
+    /* 
+    // PRODUCTION AUTHENTICATION FLOW (currently disabled)
+    // Uncomment this section to enable authentication verification
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -101,6 +103,7 @@ const Admin = () => {
     } finally {
       setLoading(false);
     }
+    */
   };
 
   const fetchVarieties = async () => {
@@ -388,7 +391,7 @@ const Admin = () => {
               className="pl-10"
             />
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
             <CategoryChip
               category="ALL"
