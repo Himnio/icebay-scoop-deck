@@ -23,8 +23,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Wallet, CreditCard } from "lucide-react";
 
 interface Variety {
   id: string;
@@ -712,30 +712,49 @@ const Home = () => {
 
       {/* Payment Method Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Select Payment Method</DialogTitle>
             <DialogDescription>
               Choose how the customer paid for this order
             </DialogDescription>
           </DialogHeader>
-          <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as "cash" | "online")}>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="cash" id="cash" />
-              <Label htmlFor="cash">Cash</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="online" id="online" />
-              <Label htmlFor="online">Online</Label>
-            </div>
-          </RadioGroup>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => createOrder("paid")} className="bg-green-600 hover:bg-green-700">
-              Confirm Payment
-            </Button>
+          <div className="grid gap-4 py-4">
+            <Card 
+              className="p-6 cursor-pointer transition-all hover:shadow-lg hover:border-primary border-2"
+              onClick={() => {
+                setPaymentMethod("cash");
+                createOrder("paid");
+              }}
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Wallet className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Cash</h3>
+                  <p className="text-sm text-muted-foreground">Payment received in cash</p>
+                </div>
+              </div>
+            </Card>
+            
+            <Card 
+              className="p-6 cursor-pointer transition-all hover:shadow-lg hover:border-primary border-2"
+              onClick={() => {
+                setPaymentMethod("online");
+                createOrder("paid");
+              }}
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <CreditCard className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Online</h3>
+                  <p className="text-sm text-muted-foreground">Digital payment method</p>
+                </div>
+              </div>
+            </Card>
           </div>
         </DialogContent>
       </Dialog>
