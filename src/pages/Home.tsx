@@ -1,7 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Category, Order, OrderItem } from "@/lib/types";
-import { Search, ShoppingCart, X, ChevronLeft, ChevronRight, Package } from "lucide-react";
+import { 
+  Search, 
+  ShoppingCart, 
+  X, 
+  ChevronLeft, 
+  ChevronRight, 
+  Package 
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
