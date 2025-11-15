@@ -196,7 +196,7 @@ const Home = () => {
     }
 
     // Show payment method dialog for paid orders
-    if (status === "paid" && !editingOrderId) {
+    if (status === "paid" && !editingOrderId && !paymentDialogOpen) {
       setPaymentDialogOpen(true);
       return;
     }
